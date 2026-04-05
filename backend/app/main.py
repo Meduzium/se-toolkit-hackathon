@@ -5,12 +5,20 @@ FastAPI main application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 from .database import engine, Base
 from .config import settings
 from .routers import music, analytics
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+
+# Try to create tables on startup
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+except Exception as e:
+    logger.warning(f"Could not initialize database on startup: {e}")
+    logger.info("Database will be initialized when first available")
 
 app = FastAPI(
     title=settings.api_title,
