@@ -26,17 +26,10 @@ Telegram bot for searching and downloading music from YouTube with trending char
 ✅ YouTube music search via yt-dlp  
 ✅ MP3 download and delivery to Telegram  
 ✅ Trending charts (daily, weekly, monthly)  
-✅ User attribution for searches  
-✅ PostgreSQL database for tracking  
-✅ Full async/await architecture  
-✅ Docker deployment  
+✅ Option to download album cover
 
 ### Not Yet Implemented
-⬜ Playlist support  
-⬜ User preferences and favorites  
-⬜ Advanced search filters  
-⬜ Music recommendations  
-⬜ Offline cache  
+⬜ Getting track text via Genius API 
 
 ## Usage
 
