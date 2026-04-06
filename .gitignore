@@ -58,3 +58,4 @@ logs/
 
 # Docker
 docker-compose.override.yml
+backend/cookies.txt
