@@ -2,6 +2,7 @@ import subprocess
 import json
 import logging
 import os
+import re
 from typing import List, Dict, Optional
 from pathlib import Path
 import yt_dlp
@@ -13,6 +14,27 @@ class YtDlpService:
     def __init__(self):
         self.download_dir = Path(settings.audio_download_dir)
         self.download_dir.mkdir(exist_ok=True)
+
+    @staticmethod
+    def _normalize_track_metadata(title: str, uploader: str) -> tuple[str, str]:
+        clean_title = (title or "Unknown").strip()
+        clean_artist = (uploader or "Unknown").strip()
+
+        # Remove uploader/channel prefix when titles look like "Channel - Artist - Track".
+        if clean_artist and clean_artist.lower() != "unknown":
+            uploader_prefix = f"{clean_artist} - "
+            if clean_title.lower().startswith(uploader_prefix.lower()):
+                clean_title = clean_title[len(uploader_prefix):].strip()
+
+        # Parse common music title forms: "Artist - Track" or "Artist – Track".
+        split_match = re.split(r"\s[-–]\s", clean_title, maxsplit=1)
+        if len(split_match) == 2:
+            possible_artist, possible_title = split_match[0].strip(), split_match[1].strip()
+            if possible_artist and possible_title:
+                clean_artist = possible_artist
+                clean_title = possible_title
+
+        return clean_title or "Unknown", clean_artist or "Unknown"
     
     def search(self, query: str, limit: int = 10) -> List[Dict]:
         '''Search YouTube for videos matching query'''
@@ -37,9 +59,13 @@ class YtDlpService:
                 if line:
                     try:
                         data = json.loads(line)
+                        title, artist = self._normalize_track_metadata(
+                            title=data.get("title", "Unknown"),
+                            uploader=data.get("uploader", "Unknown"),
+                        )
                         results.append({
-                            "title": data.get("title", "Unknown"),
-                            "artist": data.get("uploader", "Unknown"),
+                            "title": title,
+                            "artist": artist,
                             "youtube_url": data.get("webpage_url", ""),
                             "id": data.get("id", ""),
                             "duration": data.get("duration", 0),
@@ -58,6 +84,8 @@ class YtDlpService:
         try:
             # Sanitize filename
             safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+            if not safe_title:
+                safe_title = "track"
             safe_title = safe_title[:50]  # Limit length
             filename = f"{safe_title}.m4a"  # m4a instead of mp3 - no transcoding needed
             filepath = self.download_dir / filename
