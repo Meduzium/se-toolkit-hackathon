@@ -27,6 +27,8 @@ async def set_default_commands(bot: Bot):
         BotCommand(command="start", description="Start the bot"),
         BotCommand(command="help", description="Show help"),
         BotCommand(command="top", description="View top charts"),
+        BotCommand(command="lyrics", description="Find lyrics via Genius"),
+        BotCommand(command="cover", description="Find track cover via Genius"),
     ]
     await bot.set_my_commands(commands)
 
