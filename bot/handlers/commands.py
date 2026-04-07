@@ -1,11 +1,12 @@
 """
-Command handlers for /start, /help, /top
+Command handlers for /start, /help, /top, /lyrics, /cover
 """
 
 from aiogram import Router, types
 from aiogram.filters import Command
 import httpx
 import logging
+import re
 from pathlib import Path
 import sys
 
@@ -14,6 +15,38 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+
+def _split_text(text: str, chunk_size: int = 3900):
+    chunks = []
+    current = ""
+    for line in text.splitlines(keepends=True):
+        if len(current) + len(line) > chunk_size:
+            if current:
+                chunks.append(current)
+            current = line
+        else:
+            current += line
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _parse_track_query(raw_query: str) -> tuple[str, str]:
+    """Parse '/lyrics' input into (title, artist)."""
+    query = raw_query.strip().strip('"').strip("'")
+    if not query:
+        return "", "Unknown"
+
+    # Support common forms: "Artist - Title" and "Artist – Title".
+    parts = re.split(r"\s[-\u2013]\s", query, maxsplit=1)
+    if len(parts) == 2:
+        artist, title = parts[0].strip(), parts[1].strip()
+        if title:
+            return title, artist or "Unknown"
+
+    # Fallback: pass whole query as title; backend matching handles variants.
+    return query, "Unknown"
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -26,6 +59,8 @@ async def cmd_start(message: types.Message):
         f"Commands:\n"
         f"/start - Welcome message\n"
         f"/top - View top charts\n"
+        f"/lyrics <track or artist - track> - Find lyrics via Genius\n"
+        f"/cover <track or artist - track> - Get track cover via Genius\n"
         f"/help - Show help"
     )
 
@@ -40,9 +75,125 @@ async def cmd_help(message: types.Message):
         "Commands:\n"
         "/start - Show welcome message\n"
         "/top [period] - View top charts (day/week/month)\n"
-        "/help - Show this message"
+        "/help - Show this message\n\n"
+        "/lyrics <track or artist - track> - Get song lyrics via Genius\n"
+        "/cover <track or artist - track> - Get song/album cover via Genius\n\n"
+        "Examples:\n"
+        "/lyrics Души от души\n"
+        "/lyrics Lil Wayne - A Milli\n\n"
+        "/cover Tagilla\n"
+        "/cover ATL - Унисон\n"
+        
     )
     await message.answer(help_text)
+
+
+@router.message(Command("lyrics"))
+async def cmd_lyrics(message: types.Message):
+    """Handle /lyrics command to fetch lyrics without downloading."""
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer(
+            "Usage:\n"
+            "/lyrics A Milli\n"
+            "/lyrics Lil Wayne - A Milli"
+        )
+        return
+
+    title, artist = _parse_track_query(args[1])
+    if not title:
+        await message.answer("Please provide a track name.")
+        return
+
+    status_msg = await message.answer("🔎 Searching lyrics...")
+    try:
+        async with httpx.AsyncClient(timeout=45) as client:
+            response = await client.get(
+                f"{settings.backend_url}/api/lyrics",
+                params={"title": title, "artist": artist},
+            )
+
+        if response.status_code != 200:
+            await status_msg.edit_text("❌ Could not fetch lyrics now. Try again later.")
+            return
+
+        data = response.json()
+        lyrics = data.get("lyrics")
+        found = data.get("found")
+        resolved_title = data.get("title", title)
+        resolved_artist = data.get("artist", artist)
+
+        if not found or not lyrics:
+            await status_msg.edit_text(f"❌ Lyrics not found for: {resolved_title} - {resolved_artist}")
+            return
+
+        chunks = _split_text(lyrics)
+        if not chunks:
+            await status_msg.edit_text("❌ Lyrics are empty.")
+            return
+
+        chunks[0] = f"📝 Lyrics: {resolved_title} - {resolved_artist}\n\n{chunks[0]}"
+        await status_msg.edit_text(chunks[0])
+        for chunk in chunks[1:]:
+            await message.answer(chunk)
+
+    except httpx.ConnectError:
+        await status_msg.edit_text("❌ Backend not available. Please try again later.")
+    except Exception as e:
+        logger.error(f"Lyrics command error: {e}")
+        await status_msg.edit_text("❌ Error fetching lyrics. Please try again.")
+
+
+@router.message(Command("cover"))
+async def cmd_cover(message: types.Message):
+    """Handle /cover command to fetch track/album cover without downloading."""
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer(
+            "Usage:\n"
+            "/cover A Milli\n"
+            "/cover Lil Wayne - A Milli"
+        )
+        return
+
+    title, artist = _parse_track_query(args[1])
+    if not title:
+        await message.answer("Please provide a track name.")
+        return
+
+    status_msg = await message.answer("🖼 Searching cover...")
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{settings.backend_url}/api/cover",
+                params={"title": title, "artist": artist},
+            )
+
+        if response.status_code != 200:
+            await status_msg.edit_text("❌ Could not fetch cover now. Try again later.")
+            return
+
+        data = response.json()
+        cover_url = data.get("cover_url")
+        found = data.get("found")
+        resolved_title = data.get("title", title)
+        resolved_artist = data.get("artist", artist)
+
+        if not found or not cover_url:
+            await status_msg.edit_text(f"❌ Cover not found for: {resolved_title} - {resolved_artist}")
+            return
+
+        await message.answer_photo(
+            photo=cover_url,
+            caption=f"🖼 Cover: {resolved_title} - {resolved_artist}",
+        )
+        await status_msg.delete()
+
+    except httpx.ConnectError:
+        await status_msg.edit_text("❌ Backend not available. Please try again later.")
+    except Exception as e:
+        logger.error(f"Cover command error: {e}")
+        await status_msg.edit_text("❌ Error fetching cover. Please try again.")
 
 @router.message(Command("top"))
 async def cmd_top(message: types.Message):
