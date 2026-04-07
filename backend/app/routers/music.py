@@ -83,3 +83,33 @@ async def log_search(user_id: int, track_id: int, db: Session = Depends(get_db))
     db.add(search)
     db.commit()
     return {"status": "logged"}
+
+
+@router.get("/lyrics", response_model=schemas.LyricsResponse)
+async def get_lyrics(title: str, artist: str = "Unknown"):
+    '''Fetch lyrics via Genius service'''
+    if not title or len(title.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Title too short")
+
+    lyrics = genius_service.get_lyrics(title=title.strip(), artist=artist.strip() or "Unknown")
+    return schemas.LyricsResponse(
+        title=title,
+        artist=artist,
+        lyrics=lyrics,
+        found=bool(lyrics),
+    )
+
+
+@router.get("/cover", response_model=schemas.CoverResponse)
+async def get_cover(title: str, artist: str = "Unknown"):
+    '''Fetch track/album cover via Genius service'''
+    if not title or len(title.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Title too short")
+
+    cover_url = genius_service.get_album_art(title=title.strip(), artist=artist.strip() or "Unknown")
+    return schemas.CoverResponse(
+        title=title,
+        artist=artist,
+        cover_url=cover_url,
+        found=bool(cover_url),
+    )

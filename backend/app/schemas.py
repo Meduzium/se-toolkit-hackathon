@@ -41,3 +41,17 @@ class ChartEntry(BaseModel):
 class ChartsResponse(BaseModel):
     period: str
     entries: List[ChartEntry]
+
+
+class LyricsResponse(BaseModel):
+    title: str
+    artist: str
+    lyrics: Optional[str] = None
+    found: bool
+
+
+class CoverResponse(BaseModel):
+    title: str
+    artist: str
+    cover_url: Optional[str] = None
+    found: bool
