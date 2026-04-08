@@ -25,9 +25,9 @@ Telegram bot for searching and downloading music from YouTube with trending char
 ### Implemented
 ✅ YouTube music search via yt-dlp  
 ✅ MP3 download and delivery to Telegram  
-✅ Trending charts (daily, weekly, monthly)
-✅ Get the track lyrics
-✅ Download album cover 
+✅ Trending charts (daily, weekly, monthly)  
+✅ Get the track lyrics  
+✅ Download album cover  
 
 ## Usage
 
