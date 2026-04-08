@@ -33,7 +33,7 @@ async def download(
     '''Download audio file from YouTube and track in database'''
     file_path = ytdlp_service.download(youtube_url, title)
     if not file_path:
-        raise HTTPException(status_code=500, detail="Download failed")
+        raise HTTPException(status_code=500, detail=ytdlp_service.last_error or "Download failed")
     
     # Track download in database if user info provided
     if telegram_id:

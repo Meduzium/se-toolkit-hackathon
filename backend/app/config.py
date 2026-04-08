@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     api_version: str = "1.0.0"
     genius_api_key: str = ""
     audio_download_dir: str = "./downloads"
+    ytdlp_cookies_file: str = "/app/secrets/cookies.txt"
     log_level: str = "INFO"
     
     class Config:
