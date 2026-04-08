@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class GeniusService:
     def __init__(self):
-        self.api_key = settings.genius_api_key
+        self.api_key = (settings.genius_api_key or "").strip()
         self.base_url = "https://api.genius.com"
-        self.headers = {"Authorization": f"Bearer {self.api_key}"}
+        self.headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        self._official_api_enabled = bool(self.api_key)
 
     @staticmethod
     def _normalize_title_artist(title: str, artist: str) -> tuple[str, str]:
@@ -48,7 +49,7 @@ class GeniusService:
         queries = self._build_queries(title, artist)
 
         # 1) Try official Genius API (requires valid token).
-        if self.api_key:
+        if self._official_api_enabled:
             for query in queries:
                 params = {"q": query}
                 response = requests.get(
@@ -59,7 +60,11 @@ class GeniusService:
                 )
 
                 if response.status_code == 401:
-                    logger.warning("Genius API returned 401 Unauthorized, falling back to web search API")
+                    self._official_api_enabled = False
+                    logger.warning(
+                        "Genius API returned 401 Unauthorized. "
+                        "Configured token appears invalid/expired; switching to web search fallback only."
+                    )
                     break
 
                 if response.status_code != 200:
@@ -281,23 +286,72 @@ class GeniusService:
         return None
 
     def get_lyrics(self, title: str, artist: str) -> Optional[str]:
-        '''Fetch lyrics text by using Genius search API and parsing the song page.'''
+        '''Fetch lyrics from Genius first, then fallback to LRCLIB.'''
         try:
             song = self._search_song(title, artist)
-            if not song:
-                return None
+            if song:
+                song_url = song.get("url")
+                if song_url:
+                    page = requests.get(song_url, timeout=10)
+                    if page.status_code == 200:
+                        genius_lyrics = self._clean_lyrics_text(page.text)
+                        if genius_lyrics:
+                            return genius_lyrics
 
-            song_url = song.get("url")
-            if not song_url:
-                return None
-
-            page = requests.get(song_url, timeout=10)
-            if page.status_code != 200:
-                return None
-
-            return self._clean_lyrics_text(page.text)
+            return self._get_lrclib_lyrics(title=title, artist=artist)
         except Exception as e:
             logger.error(f"Genius lyrics fetch error: {e}")
+            return self._get_lrclib_lyrics(title=title, artist=artist)
+
+    @staticmethod
+    def _get_lrclib_lyrics(title: str, artist: str) -> Optional[str]:
+        """Fallback lyrics fetch from LRCLIB public API."""
+        try:
+            response = requests.get(
+                "https://lrclib.net/api/search",
+                params={"track_name": title, "artist_name": artist},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+
+            candidates = response.json()
+            if not isinstance(candidates, list) or not candidates:
+                return None
+
+            normalized_title = GeniusService._normalize_for_match(title)
+            normalized_artist = GeniusService._normalize_for_match(artist)
+
+            best_item = None
+            best_score = -1
+            for item in candidates:
+                item_title = (item.get("trackName") or item.get("name") or "").strip()
+                item_artist = (item.get("artistName") or "").strip()
+
+                item_title_norm = GeniusService._normalize_for_match(item_title)
+                item_artist_norm = GeniusService._normalize_for_match(item_artist)
+
+                score = 0
+                if normalized_title and item_title_norm == normalized_title:
+                    score += 100
+                elif normalized_title and normalized_title in item_title_norm:
+                    score += 60
+
+                if normalized_artist and normalized_artist not in {"", "unknown"}:
+                    if item_artist_norm == normalized_artist:
+                        score += 70
+                    elif normalized_artist in item_artist_norm:
+                        score += 40
+
+                if score > best_score:
+                    best_score = score
+                    best_item = item
+
+            if not best_item:
+                return None
+
+            return (best_item.get("plainLyrics") or best_item.get("syncedLyrics") or "").strip() or None
+        except Exception:
             return None
 
 genius_service = GeniusService()
