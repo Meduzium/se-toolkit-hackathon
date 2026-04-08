@@ -59,8 +59,8 @@ async def cmd_start(message: types.Message):
         f"Commands:\n"
         f"/start - Welcome message\n"
         f"/top - View top charts\n"
-        f"/lyrics <track or artist - track> - Find lyrics via Genius\n"
-        f"/cover <track or artist - track> - Get track cover via Genius\n"
+        f"/lyrics <artist name - track name> - Find lyrics via Genius\n"
+        f"/cover <artist name - track name> - Get track cover via Genius\n"
         f"/help - Show help"
     )
 
@@ -76,13 +76,11 @@ async def cmd_help(message: types.Message):
         "/start - Show welcome message\n"
         "/top [period] - View top charts (day/week/month)\n"
         "/help - Show this message\n\n"
-        "/lyrics <track or artist - track> - Get song lyrics via Genius\n"
-        "/cover <track or artist - track> - Get song/album cover via Genius\n\n"
+        "/lyrics <artist name - track name> - Get song lyrics via Genius\n"
+        "/cover <artist name - track name> - Get song/album cover via Genius\n\n"
         "Examples:\n"
-        "/lyrics Души от души\n"
-        "/lyrics Lil Wayne - A Milli\n\n"
-        "/cover Tagilla\n"
-        "/cover ATL - Унисон\n"
+        "/lyrics ATL - Унисон\n\n"
+        "/cover LAZZY2WICE - Tagilla\n"
         
     )
     await message.answer(help_text)
@@ -95,7 +93,6 @@ async def cmd_lyrics(message: types.Message):
     if len(args) < 2:
         await message.answer(
             "Usage:\n"
-            "/lyrics A Milli\n"
             "/lyrics Lil Wayne - A Milli"
         )
         return
