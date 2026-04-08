@@ -14,6 +14,19 @@ class YtDlpService:
     def __init__(self):
         self.download_dir = Path(settings.audio_download_dir)
         self.download_dir.mkdir(exist_ok=True)
+        self.cookies_file = (settings.ytdlp_cookies_file or "").strip()
+        self.last_error: Optional[str] = None
+
+    @staticmethod
+    def _map_download_error(stderr: str) -> str:
+        err = (stderr or "").lower()
+        if "cookies are no longer valid" in err:
+            return "YouTube cookies are expired/rotated. Re-export cookies.txt from your logged-in browser and restart backend."
+        if "sign in to confirm you\u2019re not a bot" in err or "sign in to confirm you're not a bot" in err:
+            return "YouTube requires authenticated cookies for this video. Update cookies.txt and try again."
+        if "http error 429" in err or "too many requests" in err:
+            return "YouTube rate-limited requests (429). Wait a bit or rotate IP/cookies and retry."
+        return "Download failed"
 
     @staticmethod
     def _normalize_track_metadata(title: str, uploader: str) -> tuple[str, str]:
@@ -82,6 +95,7 @@ class YtDlpService:
     def download(self, youtube_url: str, title: str) -> Optional[str]:
         '''Download audio from YouTube URL via subprocess with explicit environment'''
         try:
+            self.last_error = None
             # Sanitize filename
             safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
             if not safe_title:
@@ -113,6 +127,17 @@ class YtDlpService:
                 
                 youtube_url
             ]
+
+            if self.cookies_file:
+                cookies_path = Path(self.cookies_file)
+                if cookies_path.exists():
+                    cmd = cmd[:-1] + ["--cookies", str(cookies_path), youtube_url]
+                    logger.info(f"Using yt-dlp cookies file: {cookies_path}")
+                else:
+                    logger.warning(
+                        f"Configured YTDLP_COOKIES_FILE not found: {cookies_path}. "
+                        "Downloads may fail with LOGIN_REQUIRED."
+                    )
             
             # Prepare environment with explicit PATH
             env = os.environ.copy()
@@ -140,14 +165,17 @@ class YtDlpService:
                 logger.info(f"Download successful: {filepath}")
                 return str(filepath)
             else:
+                self.last_error = self._map_download_error(result.stderr)
                 logger.error(f"Download failed with return code {result.returncode}")
                 return None
         
         except subprocess.TimeoutExpired:
             logger.error(f"Download timeout for {youtube_url}")
+            self.last_error = "Download timed out. Try a shorter track or retry later."
             return None
         except Exception as e:
             logger.error(f"Download error: {e}")
+            self.last_error = "Internal download error"
             return None
 
 ytdlp_service = YtDlpService()

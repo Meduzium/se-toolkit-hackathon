@@ -133,7 +133,12 @@ async def handle_download(callback: types.CallbackQuery):
                 )
                 await callback.message.edit_text(f"✅ Downloaded: {title}")
             else:
-                await callback.message.edit_text(f"❌ Download failed. Please try again.")
+                detail = "Download failed"
+                try:
+                    detail = response.json().get("detail", detail)
+                except Exception:
+                    pass
+                await callback.message.edit_text(f"❌ {detail}")
     
     except asyncio.TimeoutError:
         await callback.message.edit_text("⏱️ Download timeout. Try a shorter video.")
