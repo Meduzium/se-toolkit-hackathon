@@ -26,6 +26,7 @@ services:
     environment:
       DATABASE_URL: postgresql://user:password@postgres:5432/music_bot_db
       GENIUS_API_KEY: ${GENIUS_API_KEY:-}
+      YTDLP_COOKIES_FILE: ${YTDLP_COOKIES_FILE:-/app/app/secrets/cookies.txt}
       LOG_LEVEL: INFO
     ports:
       - "8000:8000"
